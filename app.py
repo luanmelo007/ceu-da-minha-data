@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+import matplotlib.font_manager as fm
 from matplotlib.patches import Circle
 import pandas as pd
 import io, requests
@@ -13,46 +13,99 @@ st.markdown("""<style>.block-container{max-width:760px}h1{text-align:center}</st
             unsafe_allow_html=True)
 st.title("🌌 Céu da Minha Data")
 st.markdown("<p style='text-align:center;color:gray;margin-top:-12px'>"
-            "Mapa estelar gratuito e personalizado para qualquer momento e lugar</p>",
-            unsafe_allow_html=True)
+            "Mapa estelar personalizado · estilo pôster</p>", unsafe_allow_html=True)
 
-# ─── Nomes das constelações em português ──────────────────────────────────────
+# ─── Meses em português ───────────────────────────────────────────────────────
+MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+         "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
 
+def fmt_data_pt(dt):
+    return f"{dt.day} de {MESES[dt.month-1]} de {dt.year}"
+
+def dd_to_dm(deg, is_lat):
+    d   = int(abs(deg))
+    m   = round((abs(deg) - d) * 60)
+    suf = ("N" if deg >= 0 else "S") if is_lat else ("L" if deg >= 0 else "W")
+    return f"{d}°{m:02d}'{suf}"
+
+# ─── Nomes das constelações em português ─────────────────────────────────────
 CONST_PT = {
-    "And":"Andrômeda",    "Ant":"Máq. Pneumática","Aps":"Ave do Paraíso",
-    "Aqr":"Aquário",      "Aql":"Águia",          "Ara":"Altar",
-    "Ari":"Áries",        "Aur":"Cocheiro",        "Boo":"Boieiro",
-    "Cae":"Cinzel",       "Cam":"Girafa",          "Cnc":"Câncer",
-    "CVn":"Cães de Caça", "CMa":"Cão Maior",       "CMi":"Cão Menor",
-    "Cap":"Capricórnio",  "Car":"Quilha",          "Cas":"Cassiopeia",
-    "Cen":"Centauro",     "Cep":"Cefeu",           "Cet":"Baleia",
-    "Cha":"Camaleão",     "Cir":"Compasso",        "Col":"Pomba",
-    "Com":"Cab. Berenice","CrA":"Coroa Austral",   "CrB":"Coroa Boreal",
-    "Crv":"Corvo",        "Crt":"Taça",            "Cru":"Cruzeiro do Sul",
-    "Cyg":"Cisne",        "Del":"Golfinho",        "Dor":"Dourado",
-    "Dra":"Dragão",       "Equ":"Potro",           "Eri":"Erídano",
-    "For":"Fornalha",     "Gem":"Gêmeos",          "Gru":"Grou",
-    "Her":"Hércules",     "Hor":"Relógio",         "Hya":"Hidra",
-    "Hyi":"Hidra Macho",  "Ind":"Índio",           "Lac":"Lagartixa",
-    "Leo":"Leão",         "LMi":"Leão Menor",      "Lep":"Lebre",
-    "Lib":"Balança",      "Lup":"Lobo",            "Lyn":"Lince",
-    "Lyr":"Lira",         "Men":"Mesa",            "Mic":"Microscópio",
-    "Mon":"Unicórnio",    "Mus":"Mosca",           "Nor":"Esquadro",
-    "Oct":"Oitante",      "Oph":"Ofiúco",          "Ori":"Órion",
-    "Pav":"Pavão",        "Peg":"Pégaso",          "Per":"Perseu",
-    "Phe":"Fênix",        "Pic":"Pintor",          "PsA":"Peixe Austral",
-    "Psc":"Peixes",       "Pup":"Popa",            "Pyx":"Bússola",
-    "Ret":"Retículo",     "Sge":"Flecha",          "Sgr":"Sagitário",
-    "Sco":"Escorpião",    "Scl":"Escultor",        "Sct":"Escudo",
-    "Ser":"Serpente",     "Sex":"Sextante",        "Tau":"Touro",
-    "Tel":"Telescópio",   "TrA":"Triâng. Austral", "Tri":"Triângulo",
-    "Tuc":"Tucano",       "UMa":"Ursa Maior",      "UMi":"Ursa Menor",
-    "Vel":"Vela",         "Vir":"Virgem",          "Vol":"Peixe Voador",
-    "Vul":"Raposa",
+    "And":"Andrômeda",    "Aps":"Ave do Paraíso", "Aqr":"Aquário",
+    "Aql":"Águia",        "Ara":"Altar",           "Ari":"Áries",
+    "Aur":"Cocheiro",     "Boo":"Boieiro",         "Cae":"Cinzel",
+    "Cam":"Girafa",       "Cnc":"Câncer",          "CVn":"Cães de Caça",
+    "CMa":"Cão Maior",    "CMi":"Cão Menor",       "Cap":"Capricórnio",
+    "Car":"Quilha",       "Cas":"Cassiopeia",      "Cen":"Centauro",
+    "Cep":"Cefeu",        "Cet":"Baleia",          "Cha":"Camaleão",
+    "Cir":"Compasso",     "Col":"Pomba",           "Com":"Cab. Berenice",
+    "CrA":"Coroa Austral","CrB":"Coroa Boreal",    "Crv":"Corvo",
+    "Crt":"Taça",         "Cru":"Cruzeiro do Sul", "Cyg":"Cisne",
+    "Del":"Golfinho",     "Dor":"Dourado",         "Dra":"Dragão",
+    "Equ":"Potro",        "Eri":"Erídano",         "For":"Fornalha",
+    "Gem":"Gêmeos",       "Gru":"Grou",            "Her":"Hércules",
+    "Hor":"Relógio",      "Hya":"Hidra",           "Hyi":"Hidra Macho",
+    "Ind":"Índio",        "Lac":"Lagartixa",       "Leo":"Leão",
+    "LMi":"Leão Menor",   "Lep":"Lebre",           "Lib":"Balança",
+    "Lup":"Lobo",         "Lyn":"Lince",           "Lyr":"Lira",
+    "Men":"Mesa",         "Mic":"Microscópio",     "Mon":"Unicórnio",
+    "Mus":"Mosca",        "Nor":"Esquadro",        "Oct":"Oitante",
+    "Oph":"Ofiúco",       "Ori":"Órion",           "Pav":"Pavão",
+    "Peg":"Pégaso",       "Per":"Perseu",          "Phe":"Fênix",
+    "Pic":"Pintor",       "PsA":"Peixe Austral",   "Psc":"Peixes",
+    "Pup":"Popa",         "Pyx":"Bússola",         "Ret":"Retículo",
+    "Sge":"Flecha",       "Sgr":"Sagitário",       "Sco":"Escorpião",
+    "Scl":"Escultor",     "Sct":"Escudo",          "Ser":"Serpente",
+    "Sex":"Sextante",     "Tau":"Touro",           "Tel":"Telescópio",
+    "TrA":"Triâng. Austral","Tri":"Triângulo",     "Tuc":"Tucano",
+    "UMa":"Ursa Maior",   "UMi":"Ursa Menor",      "Vel":"Vela",
+    "Vir":"Virgem",       "Vol":"Peixe Voador",    "Vul":"Raposa",
+}
+
+# ─── Temas ────────────────────────────────────────────────────────────────────
+THEMES = {
+    "🎨 Poster Clássico (Referência)": dict(
+        bg="#0c1022", sky="#0c1022",
+        star="white",  star_alpha=0.92,
+        line="#4a5488", line_alpha=0.55, line_w=0.7,
+        name="#7a89b8", border="#3a4478",
+        title="white", meta="#7a89b8",
+        grid=False, compass=False,
+    ),
+    "🌌 Escuro Azulado": dict(
+        bg="#06061f", sky="#0b0b35",
+        star="white",  star_alpha=0.95,
+        line="#3a3a90", line_alpha=0.5, line_w=0.7,
+        name="#8888cc", border="#5050b0",
+        title="white", meta="#8888cc",
+        grid=True, compass=True,
+    ),
+    "☀️ Claro Minimalista": dict(
+        bg="#f2f2f8", sky="#e8e8f4",
+        star="#1a1a4e", star_alpha=0.9,
+        line="#8888c0", line_alpha=0.5, line_w=0.7,
+        name="#5555a0", border="#aaaacc",
+        title="#1a1a4e", meta="#5555a0",
+        grid=False, compass=False,
+    ),
+    "✨ Preto & Dourado": dict(
+        bg="#080600", sky="#100d00",
+        star="#ffd700", star_alpha=0.9,
+        line="#604800", line_alpha=0.6, line_w=0.7,
+        name="#907000", border="#806000",
+        title="#ffd700", meta="#907000",
+        grid=False, compass=False,
+    ),
+    "🌹 Rosé Romântico": dict(
+        bg="#1a0a10", sky="#240e16",
+        star="#ffd0e0", star_alpha=0.9,
+        line="#702040", line_alpha=0.55, line_w=0.7,
+        name="#c07090", border="#b04060",
+        title="#ffd0e0", meta="#c07090",
+        grid=False, compass=False,
+    ),
 }
 
 # ─── Dados ────────────────────────────────────────────────────────────────────
-
 @st.cache_data(show_spinner="🌠 Carregando catálogo de estrelas...")
 def load_stars():
     import os
@@ -63,16 +116,12 @@ def load_stars():
 
 @st.cache_data(show_spinner="🔭 Carregando constelações...")
 def load_constellations():
-    """
-    Carrega linhas e centros das constelações do d3-celestial (BSD license).
-    Coordenadas: RA em horas (0-24), Dec em graus.
-    """
     base = "https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/"
     try:
         lines = requests.get(base + "constellations.lines.json", timeout=20).json()
         names = requests.get(base + "constellations.json",       timeout=20).json()
         return lines, names
-    except Exception as e:
+    except Exception:
         return None, None
 
 def geocode_city(city_name):
@@ -87,283 +136,201 @@ def geocode_city(city_name):
         pass
     return None, None, None
 
-# ─── Cor das estrelas ─────────────────────────────────────────────────────────
-
-def bv_to_color(bv):
-    if np.isnan(bv): return "#ffffff"
-    if bv < -0.30: return "#9bb8ff"
-    if bv < -0.10: return "#aac4ff"
-    if bv <  0.10: return "#cad8ff"
-    if bv <  0.30: return "#f0f4ff"
-    if bv <  0.58: return "#fff7e8"
-    if bv <  0.81: return "#ffd49e"
-    if bv <  1.40: return "#ffb86c"
-    return "#ff8c5a"
-
-# ─── Temas ────────────────────────────────────────────────────────────────────
-
-THEMES = {
-    "🌌 Escuro Clássico": dict(
-        bg="#06061f", sky_inner="#0d1240", sky_outer="#06061f",
-        grid="#1a1a50", border="#5050b0", text="white", compass="#8888cc",
-        const_line="#3a3a90", const_name="#9090cc", use_star_colors=True),
-    "🌊 Azul Profundo": dict(
-        bg="#010d1f", sky_inner="#031a45", sky_outer="#010d1f",
-        grid="#062a6a", border="#1a5ccc", text="#b0d0f8", compass="#5590e0",
-        const_line="#1a4090", const_name="#6090d0", use_star_colors=True),
-    "☀️ Claro Minimalista": dict(
-        bg="#f0f0f8", sky_inner="#e4e4f4", sky_outer="#c8c8e8",
-        grid="#b8b8d8", border="#5050a0", text="#1a1a5e", compass="#7070b0",
-        const_line="#8888c0", const_name="#5050a0", use_star_colors=False),
-    "✨ Preto & Dourado": dict(
-        bg="#080600", sky_inner="#130f00", sky_outer="#080600",
-        grid="#201800", border="#806000", text="#ffd700", compass="#c09000",
-        const_line="#503800", const_name="#907000", use_star_colors=False),
-    "🌹 Rosé Romântico": dict(
-        bg="#1a0a10", sky_inner="#2e0f1c", sky_outer="#1a0a10",
-        grid="#401525", border="#b04060", text="#ffd0e0", compass="#e08888",
-        const_line="#702040", const_name="#c07080", use_star_colors=False),
-    "🟢 Verde Hacker": dict(
-        bg="#000a00", sky_inner="#001800", sky_outer="#000a00",
-        grid="#003300", border="#007700", text="#00ff88", compass="#00cc66",
-        const_line="#004400", const_name="#00aa44", use_star_colors=False),
-}
-
-# ─── Desenho das constelações ─────────────────────────────────────────────────
-
-def draw_constellations(ax, frame, lines_data, names_data,
-                        show_lines, show_names, c):
+# ─── Constelações ─────────────────────────────────────────────────────────────
+def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_names, c):
     from astropy.coordinates import SkyCoord
     import astropy.units as u
 
-    # ── coleta todos os pontos únicos para transformação em lote ─────────────
-    points_ra, points_dec = [], []
-    segments   = []   # (idx_a, idx_b)
-    name_items = []   # (idx, abbr)
+    pts_ra, pts_dec = [], []
+    segments, name_items = [], []
 
     if show_lines and lines_data:
         for feat in lines_data.get("features", []):
-            feat_id = feat.get("id", "")
             for line in feat.get("geometry", {}).get("coordinates", []):
                 for i in range(len(line) - 1):
-                    # RA em horas, Dec em graus (d3-celestial)
-                    ra0, dec0 = float(line[i][0]),   float(line[i][1])
-                    ra1, dec1 = float(line[i+1][0]), float(line[i+1][1])
-                    i0 = len(points_ra)
-                    points_ra.extend([ra0, ra1])
-                    points_dec.extend([dec0, dec1])
+                    i0 = len(pts_ra)
+                    pts_ra.extend([float(line[i][0]),   float(line[i+1][0])])
+                    pts_dec.extend([float(line[i][1]),  float(line[i+1][1])])
                     segments.append((i0, i0+1))
 
     if show_names and names_data:
         for feat in names_data.get("features", []):
             geom = feat.get("geometry", {})
             if geom.get("type") == "Point":
-                ra, dec = geom["coordinates"]
                 abbr = feat.get("id", "")
                 if abbr:
-                    idx = len(points_ra)
-                    points_ra.append(float(ra))
-                    points_dec.append(float(dec))
+                    idx = len(pts_ra)
+                    pts_ra.append(float(geom["coordinates"][0]))
+                    pts_dec.append(float(geom["coordinates"][1]))
                     name_items.append((idx, abbr))
 
-    if not points_ra:
+    if not pts_ra:
         return
 
-    # ── transformação em lote ─────────────────────────────────────────────────
-    coords  = SkyCoord(ra=np.array(points_ra)  * u.hourangle,
-                       dec=np.array(points_dec) * u.deg)
+    coords  = SkyCoord(ra=np.array(pts_ra)*u.hourangle, dec=np.array(pts_dec)*u.deg)
     altaz   = coords.transform_to(frame)
-    alt_arr = altaz.alt.deg
-    az_arr  = altaz.az.deg
+    alt_a   = altaz.alt.deg
+    az_a    = altaz.az.deg
+    r_a     = np.cos(np.radians(alt_a))
+    x_a     =  r_a * np.sin(np.radians(az_a))
+    y_a     =  r_a * np.cos(np.radians(az_a))
+    vis     = alt_a > 1
 
-    r_arr = np.cos(np.radians(alt_arr))
-    x_arr =  r_arr * np.sin(np.radians(az_arr))
-    y_arr =  r_arr * np.cos(np.radians(az_arr))
-    vis   = alt_arr > 1   # margem de 1° acima do horizonte
-
-    # ── linhas ────────────────────────────────────────────────────────────────
     if show_lines:
         for i0, i1 in segments:
-            if not (vis[i0] and vis[i1]):
-                continue
-            dx = x_arr[i1] - x_arr[i0]
-            dy = y_arr[i1] - y_arr[i0]
-            # FILTRO PRINCIPAL: descarta segmentos impossíveis
-            # (causados por estrelas que cruzam o limite RA=0h/24h)
-            dist_proj = np.sqrt(dx**2 + dy**2)
-            if dist_proj > 0.7:
-                continue
-            ax.plot([x_arr[i0], x_arr[i1]],
-                    [y_arr[i0], y_arr[i1]],
-                    color=c["const_line"], lw=0.8,
-                    alpha=0.55, zorder=2)
+            if vis[i0] and vis[i1]:
+                dx, dy = x_a[i1]-x_a[i0], y_a[i1]-y_a[i0]
+                if np.sqrt(dx**2+dy**2) < 0.7:   # filtra wrap-around
+                    ax.plot([x_a[i0],x_a[i1]], [y_a[i0],y_a[i1]],
+                            color=c["line"], lw=c["line_w"],
+                            alpha=c["line_alpha"], zorder=2, solid_capstyle="round")
 
-    # ── nomes em português ────────────────────────────────────────────────────
     if show_names:
         for idx, abbr in name_items:
-            if not vis[idx]:
-                continue
-            if x_arr[idx]**2 + y_arr[idx]**2 > 0.86:
-                continue
-            nome = CONST_PT.get(abbr, abbr)
-            ax.text(x_arr[idx], y_arr[idx], nome,
-                    color=c["const_name"], fontsize=5.5,
-                    ha="center", va="center",
-                    alpha=0.85, zorder=4,
-                    style="italic", fontfamily="serif")
+            if vis[idx] and (x_a[idx]**2 + y_a[idx]**2) < 0.86:
+                ax.text(x_a[idx], y_a[idx], CONST_PT.get(abbr, abbr),
+                        color=c["name"], fontsize=5.5,
+                        ha="center", va="center", alpha=0.85,
+                        zorder=4, style="italic", fontfamily="serif")
 
 # ─── Geração do Mapa ─────────────────────────────────────────────────────────
-
-def make_star_map(lat, lon, dt_utc, title, subtitle, theme_name,
-                  mag_limit, show_const_lines, show_const_names):
+def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
+                  theme_name, mag_limit, show_lines, show_names,
+                  show_grid, show_compass):
     from astropy.coordinates import SkyCoord, EarthLocation, AltAz
     from astropy.time import Time
     import astropy.units as u
 
-    stars  = load_stars()
-    stars  = stars[stars["mag"] <= mag_limit].copy()
+    stars = load_stars()
+    stars = stars[stars["mag"] <= mag_limit].copy()
 
-    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=0 * u.m)
+    location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg, height=0*u.m)
     t        = Time(dt_utc)
     frame    = AltAz(obstime=t, location=location)
 
-    coords = SkyCoord(ra=stars["ra"].values * u.hour,
-                      dec=stars["dec"].values * u.deg)
+    coords = SkyCoord(ra=stars["ra"].values*u.hour, dec=stars["dec"].values*u.deg)
     altaz  = coords.transform_to(frame)
-    alt    = altaz.alt.deg
-    az     = altaz.az.deg
-    mag    = stars["mag"].values
-    ci     = stars["ci"].values if "ci" in stars.columns else np.full(len(stars), np.nan)
+    alt, az, mag = altaz.alt.deg, altaz.az.deg, stars["mag"].values
 
-    vis = alt > 0
+    vis  = alt > 0
     n_vis = vis.sum()
-    alt, az, mag, ci = alt[vis], az[vis], mag[vis], ci[vis]
+    alt, az, mag = alt[vis], az[vis], mag[vis]
 
     r = np.cos(np.radians(alt))
     x =  r * np.sin(np.radians(az))
     y =  r * np.cos(np.radians(az))
 
-    c = THEMES[theme_name]
+    c     = THEMES[theme_name]
+    theta = np.linspace(0, 2*np.pi, 360)
 
-    # ── Figura ────────────────────────────────────────────────────────────────
-    fig = plt.figure(figsize=(8, 10.5), facecolor=c["bg"])
-    ax  = fig.add_axes([0.08, 0.11, 0.84, 0.72])
+    # ── Figura: céu em cima, textos embaixo ───────────────────────────────────
+    fig = plt.figure(figsize=(7, 10), facecolor=c["bg"])
+
+    # Área do mapa estelar (ocupa ~70% do topo)
+    ax = fig.add_axes([0.05, 0.28, 0.90, 0.68])
     ax.set_aspect("equal"); ax.axis("off")
-    ax.set_xlim(-1.18, 1.18); ax.set_ylim(-1.18, 1.18)
+    ax.set_xlim(-1.15, 1.15); ax.set_ylim(-1.15, 1.15)
 
-    theta = np.linspace(0, 2 * np.pi, 360)
+    # Fundo do céu (círculo sólido)
+    ax.fill(np.cos(theta), np.sin(theta), color=c["sky"], zorder=0)
 
-    # Gradiente de fundo
-    n_rings = 60
-    for i in range(n_rings, 0, -1):
-        blend = i / n_rings
-        inner = mcolors.to_rgb(c["sky_inner"])
-        outer = mcolors.to_rgb(c["sky_outer"])
-        col   = tuple(inner[j]*(1-blend) + outer[j]*blend for j in range(3))
-        ax.fill(i/n_rings * np.cos(theta), i/n_rings * np.sin(theta),
-                color=col, zorder=0)
+    # Grade (opcional)
+    if show_grid or c["grid"]:
+        for alt_d in [30, 60]:
+            rc = np.cos(np.radians(alt_d))
+            ax.plot(rc*np.cos(theta), rc*np.sin(theta),
+                    color=c["line"], lw=0.3, alpha=0.25, zorder=1, ls="--")
+        for az_d in range(0, 360, 45):
+            ar = np.radians(az_d)
+            ax.plot([0,np.sin(ar)],[0,np.cos(ar)],
+                    color=c["line"], lw=0.2, alpha=0.15, zorder=1)
 
-    # Grade
-    for alt_deg in [30, 60]:
-        rc = np.cos(np.radians(alt_deg))
-        ax.plot(rc*np.cos(theta), rc*np.sin(theta),
-                color=c["grid"], lw=0.5, alpha=0.35, zorder=1, ls="--")
-    for az_d in range(0, 360, 30):
-        ar = np.radians(az_d)
-        ax.plot([0, np.sin(ar)], [0, np.cos(ar)],
-                color=c["grid"], lw=0.3, alpha=0.2, zorder=1)
+    # Constelações
+    if show_lines or show_names:
+        ld, nd = load_constellations()
+        draw_constellations(ax, frame, ld, nd, show_lines, show_names, c)
 
-    # ── Constelações (antes das estrelas) ─────────────────────────────────────
-    if show_const_lines or show_const_names:
-        lines_data, names_data = load_constellations()
-        if lines_data or names_data:
-            draw_constellations(ax, frame, lines_data, names_data,
-                                show_const_lines, show_const_names, c)
-        else:
-            st.warning("⚠️ Não foi possível carregar dados de constelações.")
-
-    # ── Estrelas ──────────────────────────────────────────────────────────────
+    # Estrelas — ordenadas da mais fraca à mais brilhante
     order = np.argsort(mag)[::-1]
-    x, y, mag, ci = x[order], y[order], mag[order], ci[order]
-
-    if c["use_star_colors"]:
-        colors = [bv_to_color(b) for b in ci]
-    else:
-        colors = [c["compass"]] * len(x)
-
-    sizes_core = np.clip(5.5 - mag, 0.15, 5.0) ** 2 * 2.8
-    sizes_glow = sizes_core * 6
-
-    for i in range(len(x)):
-        ax.scatter(x[i], y[i], s=sizes_glow[i], c=[colors[i]],
-                   alpha=0.07, zorder=3, linewidths=0)
-    ax.scatter(x, y, s=sizes_core, c=colors, zorder=4, linewidths=0, alpha=0.97)
-
-    bright = mag < 1.5
-    if bright.any():
-        ax.scatter(x[bright], y[bright], s=sizes_glow[bright]*3,
-                   c=[colors[i] for i in np.where(bright)[0]],
-                   alpha=0.05, zorder=3, linewidths=0)
+    xo, yo, mo = x[order], y[order], mag[order]
+    sizes = np.clip(5.0 - mo, 0.1, 4.5)**2 * 1.8
+    ax.scatter(xo, yo, s=sizes, c=c["star"], zorder=3,
+               linewidths=0, alpha=c["star_alpha"])
 
     # Clip circular
-    clip = Circle((0, 0), 1.0, transform=ax.transData)
-    for artist in ax.collections + ax.lines + ax.texts:
-        artist.set_clip_path(clip)
+    clip = Circle((0,0), 1.0, transform=ax.transData)
+    for a in ax.collections + ax.lines + ax.texts:
+        a.set_clip_path(clip)
 
-    # Bordas
-    ax.add_patch(Circle((0,0), 1.02, fill=False,
-                         edgecolor=c["border"], lw=0.5, alpha=0.4, zorder=6))
-    ax.add_patch(Circle((0,0), 1.00, fill=False,
-                         edgecolor=c["border"], lw=2.0, zorder=6))
+    # Borda do círculo — simples e fina
+    ax.add_patch(Circle((0,0), 1.0, fill=False,
+                         edgecolor=c["border"], lw=1.2, zorder=5, alpha=0.8))
 
-    # Pontos cardeais
-    for lbl,(cx,cy) in {"N":(0,1),"L":(1,0),"S":(0,-1),"O":(-1,0)}.items():
-        ax.text(cx*1.1, cy*1.1, lbl, color=c["compass"], fontsize=11,
-                ha="center", va="center", fontweight="bold", zorder=7)
+    # Pontos cardeais (opcional)
+    if show_compass or c["compass"]:
+        for lbl,(cx,cy) in {"N":(0,1),"L":(1,0),"S":(0,-1),"O":(-1,0)}.items():
+            ax.text(cx*1.08, cy*1.08, lbl, color=c["meta"], fontsize=9,
+                    ha="center", va="center", fontweight="bold", zorder=6, alpha=0.6)
 
-    # ── Textos da figura ──────────────────────────────────────────────────────
-    fig.text(0.5, 0.905, title, color=c["text"], fontsize=15,
-             ha="center", fontweight="bold", fontfamily="serif")
-    if subtitle.strip():
-        fig.text(0.5, 0.873, subtitle, color=c["text"], fontsize=9,
-                 ha="center", alpha=0.75)
-    line_y = 0.862 if subtitle.strip() else 0.885
-    fig.add_artist(plt.Line2D([0.2,0.8],[line_y-0.008]*2,
+    # ── Área de texto (parte inferior da figura) ───────────────────────────────
+    # Linha decorativa fina acima do título
+    fig.add_artist(plt.Line2D([0.25, 0.75], [0.245, 0.245],
                                transform=fig.transFigure,
-                               color=c["border"], lw=0.8, alpha=0.5))
-    fig.text(0.5, 0.065,
-             f"Lat {lat:+.4f}°   Lon {lon:+.4f}°   ·   "
-             f"{dt_utc.strftime('%d/%m/%Y  %H:%M')} UTC",
-             color=c["text"], fontsize=7, ha="center", alpha=0.45)
-    fig.text(0.5, 0.038,
-             f"{n_vis:,} estrelas visíveis  ·  magnitude ≤ {mag_limit}  ·  HYG Database / Astropy",
-             color=c["text"], fontsize=6.5, ha="center", alpha=0.35)
+                               color=c["border"], lw=0.8, alpha=0.6))
+
+    # Título principal — grande, serif, centralizado
+    fig.text(0.5, 0.195, title, color=c["title"],
+             fontsize=20, ha="center", va="center",
+             fontweight="bold", fontfamily="serif")
+
+    # Linha fina abaixo do título
+    fig.add_artist(plt.Line2D([0.38, 0.62], [0.158, 0.158],
+                               transform=fig.transFigure,
+                               color=c["border"], lw=0.6, alpha=0.5))
+
+    # Subtítulo (opcional)
+    y_meta = 0.115
+    if subtitle.strip():
+        fig.text(0.5, 0.135, subtitle, color=c["meta"],
+                 fontsize=9, ha="center", va="center", alpha=0.8,
+                 style="italic", fontfamily="serif")
+        y_meta = 0.095
+
+    # Data em português e horário
+    data_str = f"{fmt_data_pt(local_dt)}  ·  {local_dt.strftime('%H:%M')}"
+    fig.text(0.5, y_meta, data_str, color=c["meta"],
+             fontsize=8.5, ha="center", va="center", alpha=0.75)
+
+    # Coordenadas em formato graus/minutos
+    coord_str = f"{dd_to_dm(lat, True)}  ·  {dd_to_dm(lon, False)}"
+    fig.text(0.5, y_meta - 0.03, coord_str, color=c["meta"],
+             fontsize=8, ha="center", va="center", alpha=0.65)
+
     return fig
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
-
 with st.sidebar:
     st.header("⚙️ Configurações")
 
     st.subheader("📍 Localização")
-    loc_mode = st.radio("Modo", ["🔍 Buscar cidade", "🗺️ Lat/Lon manual"],
+    loc_mode = st.radio("Modo", ["🔍 Buscar cidade","🗺️ Lat/Lon manual"],
                         label_visibility="collapsed")
     lat_default, lon_default = -3.6880, -40.3497
 
     if loc_mode == "🔍 Buscar cidade":
         city_input = st.text_input("Cidade", value="Sobral, Ceará, Brasil")
-        if st.button("🔍 Buscar coordenadas"):
+        if st.button("🔍 Buscar"):
             with st.spinner("Buscando..."):
-                la, lo, display = geocode_city(city_input)
+                la, lo, disp = geocode_city(city_input)
             if la:
                 st.session_state["lat"] = la
                 st.session_state["lon"] = lo
-                st.success(f"✅ {display[:70]}")
+                st.success(f"✅ {disp[:65]}")
             else:
                 st.error("❌ Cidade não encontrada.")
         lat = st.session_state.get("lat", lat_default)
         lon = st.session_state.get("lon", lon_default)
-        st.caption(f"📌 Lat {lat:.4f}° · Lon {lon:.4f}°")
+        st.caption(f"📌 {dd_to_dm(lat,True)} · {dd_to_dm(lon,False)}")
     else:
         lat = st.number_input("Latitude",  value=lat_default, min_value=-90.0,  max_value=90.0,  format="%.4f")
         lon = st.number_input("Longitude", value=lon_default, min_value=-180.0, max_value=180.0, format="%.4f")
@@ -371,51 +338,58 @@ with st.sidebar:
     st.divider()
     st.subheader("📅 Data e Hora")
     tz_offset = st.selectbox("Fuso horário", options=[-5,-4,-3,-2,0,1,2,3], index=2,
-        format_func=lambda x: f"UTC{x:+d}  {'(Brasília/Fortaleza)' if x==-3 else '(Acre)' if x==-5 else '(Manaus)' if x==-4 else '(Fernando de Noronha)' if x==-2 else '(UTC)' if x==0 else ''}")
+        format_func=lambda x: f"UTC{x:+d} {'(Brasília/Fortaleza)' if x==-3 else '(Acre)' if x==-5 else '(Manaus)' if x==-4 else '(Fernando de Noronha)' if x==-2 else '(UTC)' if x==0 else ''}")
     col1, col2 = st.columns(2)
     with col1: input_date = st.date_input("Data", value=date.today())
     with col2: input_time = st.time_input("Hora (local)", value=dtime(22, 0))
     local_dt = datetime.combine(input_date, input_time)
     dt_utc   = local_dt - timedelta(hours=tz_offset)
-    st.caption(f"🕐 {local_dt.strftime('%d/%m/%Y %H:%M')} → {dt_utc.strftime('%H:%M')} UTC")
+    st.caption(f"🕐 {fmt_data_pt(local_dt)} · {local_dt.strftime('%H:%M')}")
 
     st.divider()
-    st.subheader("✏️ Personalização")
-    title     = st.text_input("Título",    value="O Céu Naquele Dia",               max_chars=60)
-    subtitle  = st.text_input("Subtítulo", value="Um momento especial sob as estrelas", max_chars=80)
-    theme     = st.selectbox("Tema de cores", list(THEMES.keys()))
+    st.subheader("✏️ Texto")
+    title    = st.text_input("Título",    value="O Céu Naquele Dia", max_chars=50)
+    subtitle = st.text_input("Subtítulo (opcional)", value="", max_chars=70,
+                              placeholder="Ex: o dia que o Ray nasceu")
+
+    st.divider()
+    st.subheader("🎨 Visual")
+    theme     = st.selectbox("Tema", list(THEMES.keys()))
     mag_limit = st.slider("Quantidade de estrelas", 2.0, 7.0, 5.5, 0.5,
-                          help="Valor maior = mais estrelas")
+                          help="Maior = mais estrelas (inclui as mais fracas)")
 
     st.divider()
     st.subheader("🔭 Constelações")
-    show_const_lines = st.toggle("Mostrar linhas das constelações", value=False)
-    show_const_names = st.toggle("Mostrar nomes das constelações",  value=False)
+    show_lines  = st.toggle("Linhas das constelações",  value=True)
+    show_names  = st.toggle("Nomes das constelações",   value=True)
 
-# ─── Botão e resultado ────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("⚙️ Extras")
+    show_grid    = st.toggle("Grade de altitude/azimute", value=False)
+    show_compass = st.toggle("Pontos cardeais (N/S/L/O)", value=False)
 
+# ─── Geração ──────────────────────────────────────────────────────────────────
 st.divider()
 
 if st.button("🌌 Gerar Mapa Estelar", type="primary", use_container_width=True):
-    with st.spinner("✨ Calculando posições das estrelas..."):
+    with st.spinner("✨ Gerando mapa..."):
         try:
-            fig = make_star_map(lat, lon, dt_utc, title, subtitle, theme,
-                                mag_limit, show_const_lines, show_const_names)
+            fig = make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
+                                theme, mag_limit, show_lines, show_names,
+                                show_grid, show_compass)
             buf = io.BytesIO()
-            fig.savefig(buf, format="png", dpi=200,
+            fig.savefig(buf, format="png", dpi=250,
                         bbox_inches="tight", facecolor=fig.get_facecolor())
             buf.seek(0)
             st.pyplot(fig, use_container_width=True)
             plt.close(fig)
-            st.download_button("⬇️ Baixar PNG em alta qualidade", buf,
-                               file_name=f"ceu_{input_date.strftime('%Y%m%d')}.png",
+            st.download_button("⬇️ Baixar PNG (alta qualidade)",
+                               buf, file_name=f"ceu_{input_date.strftime('%Y%m%d')}.png",
                                mime="image/png", use_container_width=True)
-            st.success("Mapa gerado! Clique em Baixar para salvar.")
         except ImportError:
             st.error("⚠️ Execute: `pip install astropy`")
         except Exception as e:
-            st.error(f"Erro: {e}")
-            st.exception(e)
+            st.error(f"Erro: {e}"); st.exception(e)
 
 st.divider()
 st.markdown("""<p style='text-align:center;font-size:11px;color:gray'>
