@@ -166,26 +166,40 @@ def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_name
     coords  = SkyCoord(ra=np.array(pts_ra)*u.hourangle, dec=np.array(pts_dec)*u.deg)
     altaz   = coords.transform_to(frame)
     alt_a, az_a = altaz.alt.deg, altaz.az.deg
-    r_a   = np.cos(np.radians(alt_a))
+    # Projeção azimutal equidistante: r = 1 - alt/90
+    # Zênite = centro (r=0), horizonte = borda (r=1)
+    # Preserva proporções angulares — padrão em mapas estelares
+    r_a   = 1.0 - (alt_a / 90.0)
     x_a   =  r_a * np.sin(np.radians(az_a))
     y_a   =  r_a * np.cos(np.radians(az_a))
     vis   = alt_a > 1
 
     if show_lines:
+        # Pré-calcula separação angular real entre cada par de estrelas
+        # Filtra wrap-arounds RA=0/24h que causam linhas falsas cruzando o céu
+        alt_r = np.radians(alt_a)
+        az_r  = np.radians(az_a)
         for i0, i1 in segments:
             if vis[i0] and vis[i1]:
-                dist = np.hypot(x_a[i1]-x_a[i0], y_a[i1]-y_a[i0])
-                if dist < 0.65:
-                    xs = [x_a[i0], x_a[i1]]
-                    ys = [y_a[i0], y_a[i1]]
-                    # Halo (brilho ao redor da linha)
-                    ax.plot(xs, ys, color=c["line"],
-                            lw=c["line_w"] * 4, alpha=c["line_alpha"] * 0.2,
-                            zorder=2, solid_capstyle="round")
-                    # Linha principal
-                    ax.plot(xs, ys, color=c["line"],
-                            lw=c["line_w"], alpha=c["line_alpha"],
-                            zorder=2, solid_capstyle="round")
+                # Separação angular via fórmula de haversine em coordenadas horizontais
+                cos_sep = (np.sin(alt_r[i0]) * np.sin(alt_r[i1]) +
+                           np.cos(alt_r[i0]) * np.cos(alt_r[i1]) *
+                           np.cos(az_r[i1] - az_r[i0]))
+                sep_deg = np.degrees(np.arccos(np.clip(cos_sep, -1, 1)))
+                # Descarta segmentos > 45° de separação angular
+                # (nenhuma linha real de constelação tem esse tamanho)
+                if sep_deg > 45:
+                    continue
+                xs = [x_a[i0], x_a[i1]]
+                ys = [y_a[i0], y_a[i1]]
+                # Halo sutil
+                ax.plot(xs, ys, color=c["line"],
+                        lw=c["line_w"] * 4, alpha=c["line_alpha"] * 0.18,
+                        zorder=2, solid_capstyle="round")
+                # Linha principal
+                ax.plot(xs, ys, color=c["line"],
+                        lw=c["line_w"], alpha=c["line_alpha"],
+                        zorder=2, solid_capstyle="round")
 
     if show_names:
         for idx, abbr in name_items:
@@ -219,7 +233,8 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     n_vis = vis.sum()
     alt, az, mag = alt[vis], az[vis], mag[vis]
 
-    r = np.cos(np.radians(alt))
+    # Projeção azimutal equidistante: r = 1 - alt/90 (padrão em mapas estelares)
+    r = 1.0 - (alt / 90.0)
     x =  r * np.sin(np.radians(az))
     y =  r * np.cos(np.radians(az))
 
