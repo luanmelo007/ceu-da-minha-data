@@ -9,9 +9,7 @@ import io
 print("Baixando catálogo HYG...")
 
 urls = [
-    # Nova localização (GitHub, branch main)
     "https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv",
-    # Versão anterior ainda disponível em fork
     "https://raw.githubusercontent.com/kiloquad/__HYG-Database/master/hygdata_v3.csv",
 ]
 
@@ -28,16 +26,14 @@ for url in urls:
         print(f"❌ Falhou → {e}")
 
 if df is None:
-    print("\nNão foi possível baixar automaticamente.")
-    print("Acesse https://astronexus.com/hyg e baixe manualmente o arquivo CSV.")
-    print("Renomeie para 'hygdata_v41.csv' e coloque na pasta do projeto.")
-    print("Depois rode novamente este script.")
+    print("Não foi possível baixar o catálogo.")
     exit(1)
 
-# Filtra apenas colunas necessárias e magnitude <= 7.5
-df = df[['ra', 'dec', 'mag']].dropna()
+# Mantém ra, dec, mag e ci (índice de cor B-V para colorir as estrelas)
+cols = [c for c in ['ra', 'dec', 'mag', 'ci'] if c in df.columns]
+df = df[cols].dropna(subset=['ra', 'dec', 'mag'])
 df = df[df['mag'] <= 7.5].reset_index(drop=True)
 df.to_csv("stars.csv", index=False)
 
 print(f"✅ stars.csv salvo com {len(df):,} estrelas!")
-print("Agora rode: git add stars.csv && git commit -m 'adiciona stars.csv' && git push")
+print("Agora rode: git add stars.csv && git commit -m 'atualiza stars.csv com cores' && git push")
