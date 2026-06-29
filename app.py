@@ -1,7 +1,6 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 from matplotlib.patches import Circle
 import pandas as pd
 import io, requests
@@ -15,7 +14,7 @@ st.title("🌌 Céu da Minha Data")
 st.markdown("<p style='text-align:center;color:gray;margin-top:-12px'>"
             "Mapa estelar personalizado · estilo pôster</p>", unsafe_allow_html=True)
 
-# ─── Meses em português ───────────────────────────────────────────────────────
+# ─── Utilitários de formatação ───────────────────────────────────────────────
 MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
          "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
 
@@ -63,45 +62,40 @@ CONST_PT = {
 
 # ─── Temas ────────────────────────────────────────────────────────────────────
 THEMES = {
-    "🎨 Poster Clássico (Referência)": dict(
+    "🎨 Poster Clássico": dict(
         bg="#0c1022", sky="#0c1022",
-        star="white",  star_alpha=0.92,
-        line="#4a5488", line_alpha=0.55, line_w=0.7,
-        name="#7a89b8", border="#3a4478",
+        star="white",  star_alpha=0.95,
+        line="#8fa8d8", line_alpha=0.85, line_w=1.1,
+        name="#a0b4d8", border="#3a4478",
         title="white", meta="#7a89b8",
-        grid=False, compass=False,
     ),
     "🌌 Escuro Azulado": dict(
         bg="#06061f", sky="#0b0b35",
         star="white",  star_alpha=0.95,
-        line="#3a3a90", line_alpha=0.5, line_w=0.7,
-        name="#8888cc", border="#5050b0",
+        line="#7878cc", line_alpha=0.85, line_w=1.1,
+        name="#9898dd", border="#5050b0",
         title="white", meta="#8888cc",
-        grid=True, compass=True,
     ),
     "☀️ Claro Minimalista": dict(
         bg="#f2f2f8", sky="#e8e8f4",
         star="#1a1a4e", star_alpha=0.9,
-        line="#8888c0", line_alpha=0.5, line_w=0.7,
-        name="#5555a0", border="#aaaacc",
+        line="#5555a8", line_alpha=0.7, line_w=1.0,
+        name="#4444a0", border="#aaaacc",
         title="#1a1a4e", meta="#5555a0",
-        grid=False, compass=False,
     ),
     "✨ Preto & Dourado": dict(
         bg="#080600", sky="#100d00",
         star="#ffd700", star_alpha=0.9,
-        line="#604800", line_alpha=0.6, line_w=0.7,
-        name="#907000", border="#806000",
+        line="#c09020", line_alpha=0.8, line_w=1.0,
+        name="#d4a020", border="#806000",
         title="#ffd700", meta="#907000",
-        grid=False, compass=False,
     ),
     "🌹 Rosé Romântico": dict(
         bg="#1a0a10", sky="#240e16",
         star="#ffd0e0", star_alpha=0.9,
-        line="#702040", line_alpha=0.55, line_w=0.7,
-        name="#c07090", border="#b04060",
+        line="#d06080", line_alpha=0.8, line_w=1.0,
+        name="#e080a0", border="#b04060",
         title="#ffd0e0", meta="#c07090",
-        grid=False, compass=False,
     ),
 }
 
@@ -110,7 +104,7 @@ THEMES = {
 def load_stars():
     import os
     if not os.path.exists("stars.csv"):
-        st.error("⚠️ Arquivo `stars.csv` não encontrado!\nExecute: `python download_stars.py`")
+        st.error("⚠️ Execute: `python download_stars.py`")
         st.stop()
     return pd.read_csv("stars.csv")
 
@@ -143,6 +137,7 @@ def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_name
 
     pts_ra, pts_dec = [], []
     segments, name_items = [], []
+    seen_names = set()   # evita duplicatas (ex: Serpente aparece 2x)
 
     if show_lines and lines_data:
         for feat in lines_data.get("features", []):
@@ -158,7 +153,8 @@ def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_name
             geom = feat.get("geometry", {})
             if geom.get("type") == "Point":
                 abbr = feat.get("id", "")
-                if abbr:
+                if abbr and abbr not in seen_names:
+                    seen_names.add(abbr)
                     idx = len(pts_ra)
                     pts_ra.append(float(geom["coordinates"][0]))
                     pts_dec.append(float(geom["coordinates"][1]))
@@ -169,31 +165,30 @@ def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_name
 
     coords  = SkyCoord(ra=np.array(pts_ra)*u.hourangle, dec=np.array(pts_dec)*u.deg)
     altaz   = coords.transform_to(frame)
-    alt_a   = altaz.alt.deg
-    az_a    = altaz.az.deg
-    r_a     = np.cos(np.radians(alt_a))
-    x_a     =  r_a * np.sin(np.radians(az_a))
-    y_a     =  r_a * np.cos(np.radians(az_a))
-    vis     = alt_a > 1
+    alt_a, az_a = altaz.alt.deg, altaz.az.deg
+    r_a   = np.cos(np.radians(alt_a))
+    x_a   =  r_a * np.sin(np.radians(az_a))
+    y_a   =  r_a * np.cos(np.radians(az_a))
+    vis   = alt_a > 1
 
     if show_lines:
         for i0, i1 in segments:
             if vis[i0] and vis[i1]:
-                dx, dy = x_a[i1]-x_a[i0], y_a[i1]-y_a[i0]
-                if np.sqrt(dx**2+dy**2) < 0.7:   # filtra wrap-around
+                dist = np.hypot(x_a[i1]-x_a[i0], y_a[i1]-y_a[i0])
+                if dist < 0.65:   # filtra wrap-around RA=0/24h
                     ax.plot([x_a[i0],x_a[i1]], [y_a[i0],y_a[i1]],
                             color=c["line"], lw=c["line_w"],
-                            alpha=c["line_alpha"], zorder=2, solid_capstyle="round")
+                            alpha=c["line_alpha"], zorder=2,
+                            solid_capstyle="round")
 
     if show_names:
         for idx, abbr in name_items:
             if vis[idx] and (x_a[idx]**2 + y_a[idx]**2) < 0.86:
                 ax.text(x_a[idx], y_a[idx], CONST_PT.get(abbr, abbr),
-                        color=c["name"], fontsize=5.5,
-                        ha="center", va="center", alpha=0.85,
-                        zorder=4, style="italic", fontfamily="serif")
+                        color=c["name"], fontsize=6, ha="center", va="center",
+                        alpha=0.9, zorder=4, style="italic", fontfamily="serif")
 
-# ─── Geração do Mapa ─────────────────────────────────────────────────────────
+# ─── Mapa Estelar ─────────────────────────────────────────────────────────────
 def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
                   theme_name, mag_limit, show_lines, show_names,
                   show_grid, show_compass):
@@ -210,9 +205,11 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
 
     coords = SkyCoord(ra=stars["ra"].values*u.hour, dec=stars["dec"].values*u.deg)
     altaz  = coords.transform_to(frame)
-    alt, az, mag = altaz.alt.deg, altaz.az.deg, stars["mag"].values
+    alt    = altaz.alt.deg
+    az     = altaz.az.deg
+    mag    = stars["mag"].values
 
-    vis  = alt > 0
+    vis = alt > 0
     n_vis = vis.sum()
     alt, az, mag = alt[vis], az[vis], mag[vis]
 
@@ -223,23 +220,30 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     c     = THEMES[theme_name]
     theta = np.linspace(0, 2*np.pi, 360)
 
-    # ── Figura: céu em cima, textos embaixo ───────────────────────────────────
-    fig = plt.figure(figsize=(7, 10), facecolor=c["bg"])
+    # ── Figura 7×10 polegadas ─────────────────────────────────────────────────
+    # Proporções: círculo ocupa ~62% do topo, texto nos 38% inferiores
+    FW, FH = 7.0, 10.0
+    fig = plt.figure(figsize=(FW, FH), facecolor=c["bg"])
 
-    # Área do mapa estelar (ocupa ~70% do topo)
-    ax = fig.add_axes([0.05, 0.28, 0.90, 0.68])
+    # Círculo: queremos diâmetro ≈ 6.2" → 6.2/7=0.886 da largura, 6.2/10=0.62 da altura
+    AX_L = 0.057   # margem esquerda
+    AX_W = 0.886   # largura do axes em fração da figura
+    AX_H = AX_W * FW / FH   # altura equivalente em fração → círculo perfeito
+    AX_B = 1.0 - AX_H - 0.02  # bottom: 2% de margem no topo
+
+    ax = fig.add_axes([AX_L, AX_B, AX_W, AX_H])
     ax.set_aspect("equal"); ax.axis("off")
-    ax.set_xlim(-1.15, 1.15); ax.set_ylim(-1.15, 1.15)
+    ax.set_xlim(-1.12, 1.12); ax.set_ylim(-1.12, 1.12)
 
-    # Fundo do céu (círculo sólido)
+    # Fundo do céu
     ax.fill(np.cos(theta), np.sin(theta), color=c["sky"], zorder=0)
 
     # Grade (opcional)
-    if show_grid or c["grid"]:
-        for alt_d in [30, 60]:
-            rc = np.cos(np.radians(alt_d))
+    if show_grid:
+        for ad in [30, 60]:
+            rc = np.cos(np.radians(ad))
             ax.plot(rc*np.cos(theta), rc*np.sin(theta),
-                    color=c["line"], lw=0.3, alpha=0.25, zorder=1, ls="--")
+                    color=c["line"], lw=0.3, alpha=0.2, zorder=1, ls="--")
         for az_d in range(0, 360, 45):
             ar = np.radians(az_d)
             ax.plot([0,np.sin(ar)],[0,np.cos(ar)],
@@ -248,12 +252,16 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     # Constelações
     if show_lines or show_names:
         ld, nd = load_constellations()
-        draw_constellations(ax, frame, ld, nd, show_lines, show_names, c)
+        if ld or nd:
+            draw_constellations(ax, frame, ld, nd, show_lines, show_names, c)
 
-    # Estrelas — ordenadas da mais fraca à mais brilhante
-    order = np.argsort(mag)[::-1]
+    # ── Estrelas: tamanho bem diferenciado ────────────────────────────────────
+    order = np.argsort(mag)[::-1]   # fracas primeiro, brilhantes por cima
     xo, yo, mo = x[order], y[order], mag[order]
-    sizes = np.clip(5.0 - mo, 0.1, 4.5)**2 * 1.8
+
+    # Tamanho: quadrático com diferença acentuada entre brilhante e fraca
+    sizes = np.clip(6.5 - mo, 0.15, 6.0) ** 2 * 2.2
+
     ax.scatter(xo, yo, s=sizes, c=c["star"], zorder=3,
                linewidths=0, alpha=c["star_alpha"])
 
@@ -262,49 +270,63 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     for a in ax.collections + ax.lines + ax.texts:
         a.set_clip_path(clip)
 
-    # Borda do círculo — simples e fina
+    # Borda do círculo — fina e elegante
     ax.add_patch(Circle((0,0), 1.0, fill=False,
-                         edgecolor=c["border"], lw=1.2, zorder=5, alpha=0.8))
+                         edgecolor=c["border"], lw=1.0, zorder=5, alpha=0.9))
 
     # Pontos cardeais (opcional)
-    if show_compass or c["compass"]:
+    if show_compass:
         for lbl,(cx,cy) in {"N":(0,1),"L":(1,0),"S":(0,-1),"O":(-1,0)}.items():
-            ax.text(cx*1.08, cy*1.08, lbl, color=c["meta"], fontsize=9,
-                    ha="center", va="center", fontweight="bold", zorder=6, alpha=0.6)
+            ax.text(cx*1.07, cy*1.07, lbl, color=c["meta"],
+                    fontsize=8, ha="center", va="center",
+                    fontweight="bold", zorder=6, alpha=0.6)
 
-    # ── Área de texto (parte inferior da figura) ───────────────────────────────
-    # Linha decorativa fina acima do título
-    fig.add_artist(plt.Line2D([0.25, 0.75], [0.245, 0.245],
+    # ── Bloco de texto abaixo do círculo ──────────────────────────────────────
+    # Posições em fração da figura
+    circle_bottom = AX_B                  # onde termina o círculo
+    text_zone     = circle_bottom - 0.01  # zona de texto começa logo abaixo
+
+    # Linha decorativa superior
+    y_line1 = text_zone - 0.02
+    fig.add_artist(plt.Line2D([0.15, 0.85], [y_line1]*2,
                                transform=fig.transFigure,
-                               color=c["border"], lw=0.8, alpha=0.6))
+                               color=c["border"], lw=0.8, alpha=0.7))
 
-    # Título principal — grande, serif, centralizado
-    fig.text(0.5, 0.195, title, color=c["title"],
-             fontsize=20, ha="center", va="center",
+    # Título — grande, bold, serif
+    y_title = y_line1 - 0.09
+    fig.text(0.5, y_title, title,
+             color=c["title"], fontsize=26,
+             ha="center", va="center",
              fontweight="bold", fontfamily="serif")
 
-    # Linha fina abaixo do título
-    fig.add_artist(plt.Line2D([0.38, 0.62], [0.158, 0.158],
+    # Linha decorativa inferior
+    y_line2 = y_title - 0.07
+    fig.add_artist(plt.Line2D([0.30, 0.70], [y_line2]*2,
                                transform=fig.transFigure,
                                color=c["border"], lw=0.6, alpha=0.5))
 
-    # Subtítulo (opcional)
-    y_meta = 0.115
+    # Subtítulo (se houver)
+    y_sub = y_line2 - 0.035
     if subtitle.strip():
-        fig.text(0.5, 0.135, subtitle, color=c["meta"],
-                 fontsize=9, ha="center", va="center", alpha=0.8,
-                 style="italic", fontfamily="serif")
-        y_meta = 0.095
+        fig.text(0.5, y_sub, subtitle,
+                 color=c["meta"], fontsize=9.5,
+                 ha="center", va="center",
+                 style="italic", fontfamily="serif", alpha=0.85)
+        y_date = y_sub - 0.045
+    else:
+        y_date = y_line2 - 0.045
 
-    # Data em português e horário
+    # Data em português · horário
     data_str = f"{fmt_data_pt(local_dt)}  ·  {local_dt.strftime('%H:%M')}"
-    fig.text(0.5, y_meta, data_str, color=c["meta"],
-             fontsize=8.5, ha="center", va="center", alpha=0.75)
+    fig.text(0.5, y_date, data_str,
+             color=c["meta"], fontsize=9,
+             ha="center", va="center", alpha=0.8)
 
-    # Coordenadas em formato graus/minutos
+    # Coordenadas geográficas
     coord_str = f"{dd_to_dm(lat, True)}  ·  {dd_to_dm(lon, False)}"
-    fig.text(0.5, y_meta - 0.03, coord_str, color=c["meta"],
-             fontsize=8, ha="center", va="center", alpha=0.65)
+    fig.text(0.5, y_date - 0.038, coord_str,
+             color=c["meta"], fontsize=8.5,
+             ha="center", va="center", alpha=0.7)
 
     return fig
 
@@ -332,12 +354,12 @@ with st.sidebar:
         lon = st.session_state.get("lon", lon_default)
         st.caption(f"📌 {dd_to_dm(lat,True)} · {dd_to_dm(lon,False)}")
     else:
-        lat = st.number_input("Latitude",  value=lat_default, min_value=-90.0,  max_value=90.0,  format="%.4f")
-        lon = st.number_input("Longitude", value=lon_default, min_value=-180.0, max_value=180.0, format="%.4f")
+        lat = st.number_input("Latitude",  value=lat_default, format="%.4f")
+        lon = st.number_input("Longitude", value=lon_default, format="%.4f")
 
     st.divider()
     st.subheader("📅 Data e Hora")
-    tz_offset = st.selectbox("Fuso horário", options=[-5,-4,-3,-2,0,1,2,3], index=2,
+    tz_offset = st.selectbox("Fuso horário", [-5,-4,-3,-2,0,1,2,3], index=2,
         format_func=lambda x: f"UTC{x:+d} {'(Brasília/Fortaleza)' if x==-3 else '(Acre)' if x==-5 else '(Manaus)' if x==-4 else '(Fernando de Noronha)' if x==-2 else '(UTC)' if x==0 else ''}")
     col1, col2 = st.columns(2)
     with col1: input_date = st.date_input("Data", value=date.today())
@@ -348,20 +370,19 @@ with st.sidebar:
 
     st.divider()
     st.subheader("✏️ Texto")
-    title    = st.text_input("Título",    value="O Céu Naquele Dia", max_chars=50)
-    subtitle = st.text_input("Subtítulo (opcional)", value="", max_chars=70,
-                              placeholder="Ex: o dia que o Ray nasceu")
+    title    = st.text_input("Título", value="O Céu Naquele Dia", max_chars=40)
+    subtitle = st.text_input("Subtítulo (opcional)", value="",
+                              placeholder="Ex: o dia que o Ray nasceu", max_chars=60)
 
     st.divider()
     st.subheader("🎨 Visual")
     theme     = st.selectbox("Tema", list(THEMES.keys()))
-    mag_limit = st.slider("Quantidade de estrelas", 2.0, 7.0, 5.5, 0.5,
-                          help="Maior = mais estrelas (inclui as mais fracas)")
+    mag_limit = st.slider("Quantidade de estrelas", 2.0, 7.0, 5.5, 0.5)
 
     st.divider()
     st.subheader("🔭 Constelações")
-    show_lines  = st.toggle("Linhas das constelações",  value=True)
-    show_names  = st.toggle("Nomes das constelações",   value=True)
+    show_lines = st.toggle("Linhas das constelações", value=True)
+    show_names = st.toggle("Nomes das constelações",  value=True)
 
     st.divider()
     st.subheader("⚙️ Extras")
@@ -383,11 +404,9 @@ if st.button("🌌 Gerar Mapa Estelar", type="primary", use_container_width=True
             buf.seek(0)
             st.pyplot(fig, use_container_width=True)
             plt.close(fig)
-            st.download_button("⬇️ Baixar PNG (alta qualidade)",
-                               buf, file_name=f"ceu_{input_date.strftime('%Y%m%d')}.png",
+            st.download_button("⬇️ Baixar PNG (alta qualidade)", buf,
+                               file_name=f"ceu_{input_date.strftime('%Y%m%d')}.png",
                                mime="image/png", use_container_width=True)
-        except ImportError:
-            st.error("⚠️ Execute: `pip install astropy`")
         except Exception as e:
             st.error(f"Erro: {e}"); st.exception(e)
 
