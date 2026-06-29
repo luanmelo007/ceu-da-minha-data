@@ -248,7 +248,7 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     # ── Estrelas ──────────────────────────────────────────────────────────────
     order  = np.argsort(s_mag)[::-1]
     xo, yo, mo = sx[order], sy[order], s_mag[order]
-    sizes = np.clip(6.5 - mo, 0.15, 6.0)**2 * 2.2
+    sizes = np.clip(5.0 - mo, 0.08, 3.5)**2 * 1.5
     ax.scatter(xo, yo, s=sizes, c=c["star"], zorder=3,
                linewidths=0, alpha=c["star_alpha"])
 
