@@ -248,7 +248,7 @@ def make_star_map(lat, lon, dt_utc, local_dt, title, subtitle,
     # ── Estrelas ──────────────────────────────────────────────────────────────
     order  = np.argsort(s_mag)[::-1]
     xo, yo, mo = sx[order], sy[order], s_mag[order]
-    sizes = np.clip(5.0 - mo, 0.08, 3.5)**2 * 1.5
+    sizes = np.clip(6.5 - mo, 0.3, 10.0)**2 * 0.5
     ax.scatter(xo, yo, s=sizes, c=c["star"], zorder=3,
                linewidths=0, alpha=c["star_alpha"])
 
@@ -348,7 +348,7 @@ with st.sidebar:
     st.divider()
     st.subheader("🎨 Visual")
     theme     = st.selectbox("Tema", list(THEMES.keys()))
-    mag_limit = st.slider("Quantidade de estrelas", 2.0, 7.0, 5.5, 0.5)
+    mag_limit = st.slider("Quantidade de estrelas", 2.0, 7.5, 6.5, 0.5)
 
     st.divider()
     st.subheader("🔭 Constelações")
