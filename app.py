@@ -175,11 +175,17 @@ def draw_constellations(ax, frame, lines_data, names_data, show_lines, show_name
         for i0, i1 in segments:
             if vis[i0] and vis[i1]:
                 dist = np.hypot(x_a[i1]-x_a[i0], y_a[i1]-y_a[i0])
-                if dist < 0.65:   # filtra wrap-around RA=0/24h
-                    ax.plot([x_a[i0],x_a[i1]], [y_a[i0],y_a[i1]],
-                            color=c["line"], lw=c["line_w"],
-                            alpha=c["line_alpha"], zorder=2,
-                            solid_capstyle="round")
+                if dist < 0.65:
+                    xs = [x_a[i0], x_a[i1]]
+                    ys = [y_a[i0], y_a[i1]]
+                    # Halo (brilho ao redor da linha)
+                    ax.plot(xs, ys, color=c["line"],
+                            lw=c["line_w"] * 4, alpha=c["line_alpha"] * 0.2,
+                            zorder=2, solid_capstyle="round")
+                    # Linha principal
+                    ax.plot(xs, ys, color=c["line"],
+                            lw=c["line_w"], alpha=c["line_alpha"],
+                            zorder=2, solid_capstyle="round")
 
     if show_names:
         for idx, abbr in name_items:
