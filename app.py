@@ -34,25 +34,21 @@ st.markdown(
 
 # ─── Catálogo de Estrelas ─────────────────────────────────────────────────────
 
-@st.cache_data(show_spinner="📡 Baixando catálogo de estrelas (apenas na primeira vez)...")
+@st.cache_data(show_spinner="🌠 Carregando catálogo de estrelas...")
 def load_stars():
     """
-    HYG Database v3 — ~119 mil estrelas com RA, Dec e magnitude.
-    Fonte: https://github.com/astronexus/HYG-Database (domínio público)
+    Lê o catálogo estelar do arquivo local stars.csv (gerado pelo download_stars.py).
+    Fonte: HYG Database v3 — domínio público.
     """
-    urls = [
-        "https://raw.githubusercontent.com/astronexus/HYG-Database/master/hyg/v3/hyg_v3.csv",
-        "https://raw.githubusercontent.com/astronexus/HYG-Database/master/hygdata_v3.csv",
-    ]
-    for url in urls:
-        try:
-            df = pd.read_csv(url, usecols=["ra", "dec", "mag"])
-            df = df[df["mag"] <= 7.5].reset_index(drop=True)
-            return df
-        except Exception:
-            continue
-    st.error("Não foi possível baixar o catálogo estelar. Verifique sua conexão.")
-    st.stop()
+    import os
+    if not os.path.exists("stars.csv"):
+        st.error(
+            "⚠️ Arquivo `stars.csv` não encontrado!\n\n"
+            "Execute no terminal: `python download_stars.py`"
+        )
+        st.stop()
+    df = pd.read_csv("stars.csv")
+    return df[df["mag"] <= 7.5].reset_index(drop=True)
 
 # ─── Geocodificação ───────────────────────────────────────────────────────────
 
